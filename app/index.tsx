@@ -30,11 +30,21 @@ export default function Home() {
 
   useEffect(() => {
     (async () => {
-      await dbInit();
-      await refresh();
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== "granted") {
-        console.warn("Notifications permission not granted");
+      try {
+        await dbInit();
+        await refresh();
+      } catch (e) {
+        console.warn("Database init failed (web fallback will be used or check native):", e);
+      }
+
+      try {
+        const { status } = await Notifications.requestPermissionsAsync();
+        if (status !== "granted") {
+          console.warn("Notifications permission not granted");
+        }
+      } catch (e) {
+        // Notifications may not be available on web; don't crash the app
+        console.warn("Notifications setup failed (possible on web):", e);
       }
     })();
   }, []);
