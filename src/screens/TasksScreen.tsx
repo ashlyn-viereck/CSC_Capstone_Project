@@ -2,11 +2,19 @@ import { View, Text, Pressable, FlatList } from 'react-native';
 import { useEffect } from 'react';
 import { useTasks } from '../state/useTasks';
 import TaskRow from '../components/TaskRow';
+import { useAuth } from '../state/useAuth';
+
 
 export default function TasksScreen({ navigation }: any) {
   const { ready, tasks, refresh } = useTasks();
+  const { user } = useAuth();
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    if (user) {
+      refresh(user.id);
+    }
+  }, [user]);
+
 
   return (
     <View style={{ flex:1, padding:16 }}>

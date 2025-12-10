@@ -1,15 +1,14 @@
 import { useSettings } from '../state/useSettings';
 import { useGacha } from '../state/useGacha';
-import { allTasks } from './db';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../lib/supabaseClient';
 
 const BASE = 'mood_last_check';
 
-function keyForUser(email: string | undefined | null) {
-  return `${BASE}:${(email ?? 'guest').toLowerCase()}`;
+function keyForUser(profileId: string | undefined | null) {
+  return `${BASE}:${profileId ?? 'guest'}`;
 }
 
-// Convert overdue minutes to mood penalty “points” based on intensity
+// Converts overdue minutes to mood penalty “points” based on intensity
 function pointsPerOverdueMinute(intensity: ReturnType<typeof useSettings.getState>['notifIntensity']) {
   switch (intensity) {
     case 'LIGHT':    return 1 / (24 * 60);   // 1 point / day overdue
@@ -20,9 +19,12 @@ function pointsPerOverdueMinute(intensity: ReturnType<typeof useSettings.getStat
   }
 }
 
-// Call on app open or user switch
-export async function checkOverdueAndApplyPetMood(userEmail?: string | null) {
-  const k = keyForUser(userEmail);
+// call on app open or user switch
+export async function checkOverdueAndApplyPetMood(profileId?: string | null) {
+  if (!profileId) return;
+
+  // track last check per user in AsyncStorage (optional, keeps same logic)
+  const k = keyForUser(profileId);
   const lastRaw = await AsyncStorage.getItem(k);
   const last = lastRaw ? Number(lastRaw) : Date.now();
   const now = Date.now();
@@ -32,22 +34,31 @@ export async function checkOverdueAndApplyPetMood(userEmail?: string | null) {
   const ppm = pointsPerOverdueMinute(intensity);
   if (ppm === 0) return;
 
-  const tasks = await allTasks();
-  let points = 0;
+  // get incomplete tasks from Supabase
+  const { data: tasks, error } = await supabase
+    .from('tasks')
+    .select('*')
+    .eq('profile_id', profileId)
+    .eq('completed', false);
 
-  for (const t of tasks) {
-    if (!t.dueAt || t.completed) continue;
-    const due = t.dueAt;
+  if (error) {
+    console.error('Error fetching tasks:', error);
+    return;
+  }
+
+  let points = 0;
+  for (const t of tasks ?? []) {
+    if (!t.due_at) continue;
+    const due = t.due_at;
     if (due >= now) continue; // not overdue
-    // apply penalty only for the time slice since last check
     const start = Math.max(last, due);
     const overdueSliceMins = Math.max(0, Math.floor((now - start) / 60000));
     points += overdueSliceMins * ppm;
   }
 
-  // round down so you need enough aggregate overdue time to matter
   const wholePoints = Math.floor(points);
   if (wholePoints > 0) {
     await useGacha.getState().applyOverdueMoodPenalty(wholePoints);
   }
 }
+

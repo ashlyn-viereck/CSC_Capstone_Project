@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, Text, TextInput, Pressable, Platform } from 'react-native';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { useTasks } from '../state/useTasks';
+import { useAuth } from '../state/useAuth'; 
 
 function openAndroidDateTime(
   initial: Date,
@@ -39,7 +40,7 @@ export default function AddEditTaskScreen({ navigation, route }: any) {
   const [title, setTitle] = useState(existing?.title ?? '');
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const [dueAt, setDueAt] = useState<Date | null>(
-    existing?.dueAt ? new Date(existing.dueAt) : null
+    existing?.due_at ? new Date(existing.due_at) : null
   );
   const [showPicker, setShowPicker] = useState(false);
 
@@ -52,15 +53,18 @@ export default function AddEditTaskScreen({ navigation, route }: any) {
     }
   };
 
-  async function onSave() {
-    if (!title.trim()) return;
-    if (existing) {
-      await edit(existing.id, { title: title.trim(), notes, dueAt: dueAt?.getTime() ?? null });
-    } else {
-      await add({ title: title.trim(), notes, dueAt: dueAt?.getTime() ?? null });
-    }
-    navigation.goBack();
+  const { user } = useAuth(); // get current user
+
+async function onSave() {
+  if (!title.trim() || !user) return;
+  if (existing) {
+    await edit(user.id, existing.id, { title: title.trim(), notes, due_at: dueAt?.getTime() ?? null });
+  } else {
+    await add(user.id, { title: title.trim(), notes, due_at: dueAt?.getTime() ?? null });
   }
+  navigation.goBack();
+}
+
 
   return (
     <View style={{ flex: 1, padding: 16 }}>
